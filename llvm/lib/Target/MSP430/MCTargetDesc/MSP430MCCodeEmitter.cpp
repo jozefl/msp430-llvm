@@ -81,6 +81,11 @@ class MSP430MCCodeEmitter : public MCCodeEmitter {
                         SmallVectorImpl<MCFixup> &Fixups,
                         const MCSubtargetInfo &STI) const;
 
+  /// Encode the register in a POPM instruction.
+  unsigned getPOPMRegOpValue(const MCInst &MI, unsigned Op,
+                             SmallVectorImpl<MCFixup> &Fixups,
+                             const MCSubtargetInfo &STI) const;
+
 public:
   MSP430MCCodeEmitter(MCContext &ctx, MCInstrInfo const &MCII)
       : Ctx(ctx), MCII(MCII) {}
@@ -248,6 +253,26 @@ unsigned MSP430MCCodeEmitter::getCCOpValue(const MCInst &MI, unsigned Op,
   default:
     llvm_unreachable("Unknown condition code");
   }
+}
+
+/// In a POPM instruction, the destination register is encoded as:
+///   <regnum> - <cnt> + 1.
+unsigned
+MSP430MCCodeEmitter::getPOPMRegOpValue(const MCInst &MI, unsigned Op,
+                                       SmallVectorImpl<MCFixup> &Fixups,
+                                       const MCSubtargetInfo &STI) const {
+  assert(Op == 1 && "expected popmreg to be op1 of the inst");
+  const MCOperand &MO1 = MI.getOperand(1);
+  assert(MO1.isReg() && "register operand expected");
+  unsigned Reg = Ctx.getRegisterInfo()->getEncodingValue(MO1.getReg());
+
+  const MCOperand &MO = MI.getOperand(0);
+  assert(MO.isImm() && "expr operand expected");
+
+  int64_t Count = MO.getImm();
+  assert((Count >= 1 && Count <= 16) && "invalid popm count");
+
+  return Reg - Count + 1;
 }
 
 MCCodeEmitter *createMSP430MCCodeEmitter(const MCInstrInfo &MCII,

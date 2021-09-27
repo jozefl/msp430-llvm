@@ -64,11 +64,13 @@ void MSP430FrameLowering::emitPrologue(MachineFunction &MF,
 
     // Save FP into the appropriate stack slot...
     BuildMI(MBB, MBBI, DL, TII.get(MSP430::PUSH16r))
-      .addReg(MSP430::R4, RegState::Kill);
+        .addReg(MSP430::R4, RegState::Kill)
+        .setMIFlag(MachineInstr::FrameSetup);
 
     // Update FP with the new base value...
     BuildMI(MBB, MBBI, DL, TII.get(MSP430::MOV16rr), MSP430::R4)
-      .addReg(MSP430::SP);
+        .addReg(MSP430::SP)
+        .setMIFlag(MachineInstr::FrameSetup);
 
     // Mark the FramePtr as live-in in every block except the entry.
     for (MachineBasicBlock &MBBJ : llvm::drop_begin(MF))
@@ -78,7 +80,7 @@ void MSP430FrameLowering::emitPrologue(MachineFunction &MF,
     NumBytes = StackSize - MSP430FI->getCalleeSavedFrameSize();
 
   // Skip the callee-saved push instructions.
-  while (MBBI != MBB.end() && (MBBI->getOpcode() == MSP430::PUSH16r))
+  while (MBBI != MBB.end() && MBBI->getFlag(MachineInstr::FrameSetup))
     ++MBBI;
 
   if (MBBI != MBB.end())
@@ -131,15 +133,15 @@ void MSP430FrameLowering::emitEpilogue(MachineFunction &MF,
     NumBytes = FrameSize - CSSize;
 
     // pop FP.
-    BuildMI(MBB, MBBI, DL, TII.get(MSP430::POP16r), MSP430::R4);
+    BuildMI(MBB, MBBI, DL, TII.get(MSP430::POP16r), MSP430::R4)
+        .setMIFlag(MachineInstr::FrameDestroy);
   } else
     NumBytes = StackSize - CSSize;
 
   // Skip the callee-saved pop instructions.
   while (MBBI != MBB.begin()) {
     MachineBasicBlock::iterator PI = std::prev(MBBI);
-    unsigned Opc = PI->getOpcode();
-    if (Opc != MSP430::POP16r && !PI->isTerminator())
+    if (!PI->getFlag(MachineInstr::FrameDestroy) && !PI->isTerminator())
       break;
     --MBBI;
   }
@@ -189,13 +191,22 @@ bool MSP430FrameLowering::spillCalleeSavedRegisters(
   MSP430MachineFunctionInfo *MFI = MF.getInfo<MSP430MachineFunctionInfo>();
   MFI->setCalleeSavedFrameSize(CSI.size() * 2);
 
+  bool MSP430X = MF.getSubtarget<MSP430Subtarget>().hasMSP430X();
   for (unsigned i = CSI.size(); i != 0; --i) {
     unsigned Reg = CSI[i-1].getReg();
     // Add the callee-saved register as live-in. It's killed at the spill.
     MBB.addLiveIn(Reg);
-    BuildMI(MBB, MI, DL, TII.get(MSP430::PUSH16r))
-      .addReg(Reg, RegState::Kill);
+    if (!MSP430X)
+      BuildMI(MBB, MI, DL, TII.get(MSP430::PUSH16r))
+          .addReg(Reg, RegState::Kill)
+          .setMIFlag(MachineInstr::FrameSetup);
   }
+
+  if (MSP430X)
+    BuildMI(MBB, MI, DL, TII.get(MSP430::PUSHM16r))
+        .addImm(CSI.size())
+        .addReg(CSI[CSI.size() - 1].getReg())
+        .setMIFlag(MachineInstr::FrameSetup);
   return true;
 }
 
@@ -211,8 +222,16 @@ bool MSP430FrameLowering::restoreCalleeSavedRegisters(
   MachineFunction &MF = *MBB.getParent();
   const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
 
-  for (unsigned i = 0, e = CSI.size(); i != e; ++i)
-    BuildMI(MBB, MI, DL, TII.get(MSP430::POP16r), CSI[i].getReg());
+  if (MF.getSubtarget<MSP430Subtarget>().hasMSP430X())
+    BuildMI(MBB, MI, DL, TII.get(MSP430::POPM16r))
+        .addImm(CSI.size())
+        .addReg(CSI[CSI.size() - 1].getReg())
+        .setMIFlag(MachineInstr::FrameDestroy);
+  else {
+    for (unsigned I = 0, E = CSI.size(); I != E; ++I)
+      BuildMI(MBB, MI, DL, TII.get(MSP430::POP16r), CSI[I].getReg())
+          .setMIFlag(MachineInstr::FrameDestroy);
+  }
 
   return true;
 }

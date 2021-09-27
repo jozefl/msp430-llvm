@@ -26,6 +26,10 @@ def MSP430rrax     : SDNode<"MSP430ISD::RRAX", SDTIntShiftOp>;
 def MSP430rlax     : SDNode<"MSP430ISD::RLAX", SDTIntShiftOp>;
 def MSP430rrux     : SDNode<"MSP430ISD::RRUX", SDTIntShiftOp>;
 
+//===----------------------------------------------------------------------===//
+// MSP430X Operand Definitions.
+//===----------------------------------------------------------------------===//
+
 // Differentiate between rpt2 and rpt4 to catch shift counts in IIExtExcRot
 // instructions that are too large.
 def Rpt2ImmAsmOperand : AsmOperandClass {
@@ -50,6 +54,11 @@ def rpt4imm : Operand<i8>,
   let ParserMatchClass = Rpt4ImmAsmOperand;
   let EncoderMethod = "getRpt4ImmOpValue";
   let DecoderMethod = "decodeRptImm";
+}
+
+def popmreg : RegisterOperand<GR16> {
+  let EncoderMethod = "getPOPMRegOpValue";
+  let DecoderMethod = "decodePOPMRegOperand";
 }
 
 //===----------------------------------------------------------------------===//
@@ -122,4 +131,9 @@ def : InstAlias<"rlax\t$rd, $cnt", (RLAX_16 GR16:$rd, rpt4imm:$cnt), 0>;
 def : InstAlias<"rrax.b\t$rd, $cnt", (RRAX_8 GR8:$rd, rpt4imm:$cnt), 0>;
 def : InstAlias<"rrux.b\t$rd, $cnt", (RRUX_8 GR8:$rd, rpt4imm:$cnt), 0>;
 def : InstAlias<"rlax.b\t$rd, $cnt", (RLAX_8 GR8:$rd, rpt4imm:$cnt), 0>;
+
+let mayStore = 1 in {
+  def PUSHM16r : IIExtExcPushPopForm16<0, (outs), (ins rpt4imm:$cnt, GR16:$rs), "pushm\t$cnt, $rs", []>;
+  def POPM16r  : IIExtExcPushPopForm16<1, (outs), (ins rpt4imm:$cnt, popmreg:$rs), "popm\t$cnt, $rs", []>;
+}
 } // Predicates = [HasMSP430X]

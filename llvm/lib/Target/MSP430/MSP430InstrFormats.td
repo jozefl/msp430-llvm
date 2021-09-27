@@ -523,6 +523,25 @@ class I8rExtended<bits<4> opcode, bit zc, bit rpt,
   let Inst{63-48} = ExtensionWord;
 }
 
+// MSP430 Extended Format II Instruction Format Exception - PUSHM/POPM.
+class IIExtExcPushPopForm<ALKind al, bit ispop,
+                          dag outs, dag ins, string asmstr, list<dag> pattern>
+  : MSP430Inst<outs, ins, 2, asmstr> {
+  let Pattern = pattern;
+
+  bits<4> rs;
+  bits<4> cnt;
+
+  let Inst{15-10} = 0b000101;
+  let Inst{9}     = ispop;
+  let Inst{8}     = al.Value;
+  let Inst{7-4}   = cnt;
+  let Inst{3-0}   = rs;
+}
+
+class IIExtExcPushPopForm16<bit ispop, dag outs, dag ins, string asmstr, list<dag> pattern>
+  : IIExtExcPushPopForm<ALWord, ispop, outs, ins, asmstr, pattern>;
+
 // Pseudo instructions
 class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern>
   : MSP430Inst<outs, ins, 0, asmstr> {

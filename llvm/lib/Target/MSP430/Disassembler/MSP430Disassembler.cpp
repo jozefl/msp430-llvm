@@ -111,6 +111,10 @@ static DecodeStatus DecodeMemOperand(MCInst &MI, uint64_t Bits,
                                      uint64_t Address,
                                      const void *Decoder);
 
+/// Decode the register from a POPM instruction.
+static DecodeStatus decodePOPMRegOperand(MCInst &MI, uint64_t Bits,
+                                         uint64_t Address, const void *Decoder);
+
 #include "MSP430GenDisassemblerTables.inc"
 
 static DecodeStatus DecodeCGImm(MCInst &MI, uint64_t Bits, uint64_t Address,
@@ -151,6 +155,23 @@ static DecodeStatus DecodeMemOperand(MCInst &MI, uint64_t Bits,
   
   MI.addOperand(MCOperand::createImm((int16_t)Imm));
   return MCDisassembler::Success;
+}
+
+/// In a POPM instruction, the destination register is encoded as:
+///   <regnum> - <cnt> + 1.
+static DecodeStatus decodePOPMRegOperand(MCInst &MI, uint64_t Bits,
+                                         uint64_t Address,
+                                         const void *Decoder) {
+  assert(MI.getNumOperands() == 1 && "expected one already decoded operand");
+  const MCOperand &MO = MI.getOperand(0);
+  assert(MO.isImm() && "expr operand expected");
+
+  int64_t Count = MO.getImm();
+  assert(Count <= 15 && "invalid popm count value");
+  unsigned Reg = Bits & 15;
+  Reg = Reg + Count - 1;
+
+  return DecodeGR16RegisterClass(MI, Reg, Address, Decoder);
 }
 
 enum AddrMode {
