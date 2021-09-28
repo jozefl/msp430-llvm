@@ -1,3 +1,32 @@
+# MSP430-LLVM
+
+This repository is forked from the main LLVM repository at
+https://github.com/llvm/llvm-project. It is a staging area for MSP430-specific
+patches I've developed, which are awaiting review for integration into the main
+LLVM repository.
+
+
+The patches that are only in this fork are listed below, with links to the
+corresponding upstream LLVM Differential revisions:
+* [[MSP430] [Clang] Update hard-coded MCU data](https://reviews.llvm.org/D108301)
+* [[MSP430] [Clang] Infer CPU type from -mcpu= or -mmcu=](https://reviews.llvm.org/D109174)
+* [[MSP430] Add assembler and MC support for MSP430X shift instructions](https://reviews.llvm.org/D110723)
+* [[MSP430] Add support for the `rpt` assembler directive](https://reviews.llvm.org/D110724)
+* [[MSP430] Add codegen support for MSP430X shift instructions](https://reviews.llvm.org/D110725)
+* [[MSP430] Implement PUSHM and POPM instructions](https://reviews.llvm.org/D110240)
+
+
+The following patches have been integrated into the upstream LLVM project:
+* [[llvm-readobj] Refactor ELFDumper::printAttributes()](https://reviews.llvm.org/D107968)
+* [[llvm-readobj] Support dumping of MSP430 ELF attributes](https://reviews.llvm.org/D107969)
+* [[MSP430] [Clang] Remove support for -mmcu=msp430](https://reviews.llvm.org/D108299)
+
+
+Collectively, these patches improve code generation for MSP430X devices in the
+small memory model, as they implement the extended shift, push, and pop
+instructions. Using these extended instructions reduces code size and improves
+performance for some common operations.
+
 # The LLVM Compiler Infrastructure
 
 This directory and its sub-directories contain source code for LLVM,
