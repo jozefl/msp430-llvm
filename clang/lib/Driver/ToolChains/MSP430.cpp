@@ -16,6 +16,7 @@
 #include "llvm/Option/ArgList.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
+#include <algorithm>
 
 using namespace clang::driver;
 using namespace clang::driver::toolchains;
@@ -23,86 +24,117 @@ using namespace clang::driver::tools;
 using namespace clang;
 using namespace llvm::opt;
 
-static bool isSupportedMCU(const StringRef MCU) {
-  return llvm::StringSwitch<bool>(MCU)
-#define MSP430_MCU(NAME) .Case(NAME, true)
+struct MCUData {
+  StringRef Name;
+  StringRef CPU = "msp430";
+  StringRef HWMult = "none";
+  friend bool operator<(const MCUData &M1, const MCUData &M2) {
+    return M1.Name < M2.Name;
+  }
+  bool isValid() const { return !Name.empty(); }
+};
+
+/// Return the MCUData entry from MSP430Target.def with the name \p MCU.
+///
+/// Returns a "!MCUData::isValid()" object if an entry with a name exactly
+/// matching \p MCU isn't found.
+///
+/// std::lower_bound is used to perform an efficient binary search on the data.
+static MCUData getMCUData(const StringRef MCU) {
+  const MCUData MSP430MCUData[] = {
+#define MSP430_MCU(NAME, CPU, HWMULT) {(NAME), (CPU), (HWMULT)},
 #include "clang/Basic/MSP430Target.def"
+#undef MSP430_MCU
+  };
+
+  MCUData MCUDataQuery = {MCU, "", ""};
+  const auto *Iter = std::lower_bound(std::begin(MSP430MCUData),
+                                      std::end(MSP430MCUData), MCUDataQuery);
+  if (Iter == std::end(MSP430MCUData) || Iter->Name != MCU) {
+    return {};
+  }
+  return *Iter;
+}
+
+static bool isHWMultArgValid(StringRef HWMult) {
+  return llvm::StringSwitch<bool>(HWMult)
+      .Case("none", true)
+      .Case("auto", true)
+      .Case("16bit", true)
+      .Case("32bit", true)
+      .Case("f5series", true)
       .Default(false);
 }
 
-static StringRef getSupportedHWMult(const Arg *MCU) {
-  if (!MCU)
-    return "none";
-
-  return llvm::StringSwitch<StringRef>(MCU->getValue())
-#define MSP430_MCU_FEAT(NAME, HWMULT) .Case(NAME, HWMULT)
-#include "clang/Basic/MSP430Target.def"
-      .Default("none");
-}
-
-static StringRef getHWMultLib(const ArgList &Args) {
-  StringRef HWMult = Args.getLastArgValue(options::OPT_mhwmult_EQ, "auto");
-  if (HWMult == "auto") {
-    HWMult = getSupportedHWMult(Args.getLastArg(options::OPT_mmcu_EQ));
-  }
-
-  return llvm::StringSwitch<StringRef>(HWMult)
-      .Case("16bit", "-lmul_16")
-      .Case("32bit", "-lmul_32")
-      .Case("f5series", "-lmul_f5")
-      .Default("-lmul_none");
-}
-
-void msp430::getMSP430TargetFeatures(const Driver &D, const ArgList &Args,
-                                     std::vector<StringRef> &Features) {
-  const Arg *MCU = Args.getLastArg(options::OPT_mmcu_EQ);
-  if (MCU && !isSupportedMCU(MCU->getValue())) {
-    D.Diag(diag::err_drv_clang_unsupported) << MCU->getValue();
-    return;
-  }
-
+/// Process the -mhwmult= and -mmcu= options to determine which hwmult feature,
+/// if any, to enable by adding to \p Features.
+///
+/// \p SupportedHWMult is the hardware multiply version supported by the MCU
+/// that the user specified with -mmcu=. It is empty if the user didn't specify
+/// an MCU.
+///
+/// Diagnose and report any issues with the values passed to these options.
+static void addHWMultFeature(const Driver &D, const ArgList &Args,
+                             StringRef SupportedHWMult,
+                             std::vector<StringRef> &Features) {
   const Arg *HWMultArg = Args.getLastArg(options::OPT_mhwmult_EQ);
-  if (!MCU && !HWMultArg)
+  if (SupportedHWMult.empty() && !HWMultArg)
     return;
 
-  StringRef HWMult = HWMultArg ? HWMultArg->getValue() : "auto";
-  StringRef SupportedHWMult = getSupportedHWMult(MCU);
+  StringRef HWMult = (HWMultArg ? HWMultArg->getValue() : "auto");
+  if (!isHWMultArgValid(HWMult)) {
+    D.Diag(diag::err_drv_unsupported_option_argument)
+        << HWMultArg->getAsString(Args) << HWMultArg->getValue();
+    return;
+  }
 
   if (HWMult == "auto") {
-    // 'auto' - deduce hw multiplier support based on mcu name provided.
-    // If no mcu name is provided, assume no hw multiplier is supported.
-    if (!MCU)
-      D.Diag(clang::diag::warn_drv_msp430_hwmult_no_device);
+    if (SupportedHWMult.empty()) {
+      D.Diag(diag::warn_drv_msp430_hwmult_no_device);
+      return;
+    }
     HWMult = SupportedHWMult;
   }
 
-  if (HWMult == "none") {
-    // 'none' - disable hw multiplier.
-    Features.push_back("-hwmult16");
-    Features.push_back("-hwmult32");
-    Features.push_back("-hwmultf5");
+  if (HWMult == "none")
+    return;
+
+  if (SupportedHWMult == "none" && HWMult != "none") {
+    D.Diag(diag::warn_drv_msp430_hwmult_unsupported) << HWMultArg->getValue();
+    return;
+  }
+  if (!SupportedHWMult.empty() && HWMult != SupportedHWMult) {
+    D.Diag(diag::warn_drv_msp430_hwmult_mismatch)
+        << SupportedHWMult << HWMultArg->getValue();
     return;
   }
 
-  if (MCU && SupportedHWMult == "none")
-    D.Diag(clang::diag::warn_drv_msp430_hwmult_unsupported) << HWMult;
-  if (MCU && HWMult != SupportedHWMult)
-    D.Diag(clang::diag::warn_drv_msp430_hwmult_mismatch)
-        << SupportedHWMult << HWMult;
+  assert((HWMult == "16bit" || HWMult == "32bit" || HWMult == "f5series") &&
+         "unexpected HWMult value");
+  Features.push_back(llvm::StringSwitch<StringRef>(HWMult)
+                         .Case("16bit", "+hwmult16")
+                         .Case("32bit", "+hwmult32")
+                         .Case("f5series", "+hwmultf5"));
+}
 
-  if (HWMult == "16bit") {
-    // '16bit' - for 16-bit only hw multiplier.
-    Features.push_back("+hwmult16");
-  } else if (HWMult == "32bit") {
-    // '32bit' - for 16/32-bit hw multiplier.
-    Features.push_back("+hwmult32");
-  } else if (HWMult == "f5series") {
-    // 'f5series' - for 16/32-bit hw multiplier supported by F5 series mcus.
-    Features.push_back("+hwmultf5");
-  } else {
-    D.Diag(clang::diag::err_drv_unsupported_option_argument)
-        << HWMultArg->getAsString(Args) << HWMult;
+/// Process the -mmcu= and -mhwmult= options to determine the target features.
+///
+/// This is the only time Clang will warn about conflicts between these options,
+/// or issues with the values passed to them.
+void msp430::getMSP430TargetFeatures(const Driver &D, const ArgList &Args,
+                                     std::vector<StringRef> &Features) {
+  const Arg *MCUArg = Args.getLastArg(options::OPT_mmcu_EQ);
+  StringRef SupportedHWMult;
+  if (MCUArg) {
+    MCUData LoadedMCUData = getMCUData(MCUArg->getValue());
+    if (!LoadedMCUData.isValid()) {
+      D.Diag(diag::err_drv_clang_unsupported) << MCUArg->getValue();
+      return;
+    }
+    SupportedHWMult = LoadedMCUData.HWMult;
   }
+
+  addHWMultFeature(D, Args, SupportedHWMult, Features);
 }
 
 /// MSP430 Toolchain
@@ -177,6 +209,29 @@ void MSP430ToolChain::addClangTargetOptions(const ArgList &DriverArgs,
 
 Tool *MSP430ToolChain::buildLinker() const {
   return new tools::msp430::Linker(*this);
+}
+
+/// Use the values passed to the -mmcu= and -mhwmult= options to determine the
+/// correct hardware multiply library to put on the linker command line.
+///
+/// MCUData for the given MCU needs to be loaded again, but since it
+/// was already loaded and processed earlier in the driver (see
+/// getMSP430TargetFeatures), there's no need to warn or error on invalid
+/// input.
+static StringRef getHWMultLib(const ArgList &Args) {
+  MCUData LoadedMCUData;
+  if (const Arg *MCUArg = Args.getLastArg(options::OPT_mmcu_EQ))
+    LoadedMCUData = getMCUData(MCUArg->getValue());
+
+  StringRef HWMult = Args.getLastArgValue(options::OPT_mhwmult_EQ, "auto");
+  if (HWMult == "auto")
+    HWMult = LoadedMCUData.HWMult;
+
+  return llvm::StringSwitch<StringRef>(HWMult)
+      .Case("16bit", "-lmul_16")
+      .Case("32bit", "-lmul_32")
+      .Case("f5series", "-lmul_f5")
+      .Default("-lmul_none");
 }
 
 void msp430::Linker::AddStartFiles(bool UseExceptions, const ArgList &Args,

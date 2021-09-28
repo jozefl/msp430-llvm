@@ -3,16 +3,12 @@
 
 // RUN: %clang -### -target msp430 %s 2>&1 | FileCheck %s
 // RUN: %clang -### -target msp430 %s -mhwmult=auto 2>&1 | FileCheck %s
+// RUN: %clang -### -target msp430 %s -mhwmult=none 2>&1 | FileCheck %s
+// RUN: %clang -### -target msp430 %s -mhwmult=none -mmcu=msp430f147 2>&1 | FileCheck %s
+// RUN: %clang -### -target msp430 %s -mhwmult=none -mmcu=msp430f4783 2>&1 | FileCheck %s
 // CHECK-NOT: "-target-feature" "+hwmult16"
 // CHECK-NOT: "-target-feature" "+hwmult32"
 // CHECK-NOT: "-target-feature" "+hwmultf5"
-
-// RUN: %clang -### -target msp430 %s -mhwmult=none 2>&1 | FileCheck --check-prefix=CHECK-NONE %s
-// RUN: %clang -### -target msp430 %s -mhwmult=none -mmcu=msp430f147 2>&1 | FileCheck --check-prefix=CHECK-NONE %s
-// RUN: %clang -### -target msp430 %s -mhwmult=none -mmcu=msp430f4783 2>&1 | FileCheck --check-prefix=CHECK-NONE %s
-// CHECK-NONE: "-target-feature" "-hwmult16"
-// CHECK-NONE: "-target-feature" "-hwmult32"
-// CHECK-NONE: "-target-feature" "-hwmultf5"
 
 // RUN: %clang -### -target msp430 %s -mhwmult=16bit 2>&1 | FileCheck --check-prefix=CHECK-16 %s
 // CHECK-16: "-target-feature" "+hwmult16"
