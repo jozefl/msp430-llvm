@@ -72,6 +72,10 @@ class MSP430MCCodeEmitter : public MCCodeEmitter {
   unsigned getRpt2ImmOpValue(const MCInst &MI, unsigned Op,
                              SmallVectorImpl<MCFixup> &Fixups,
                              const MCSubtargetInfo &STI) const;
+  /// Encode the repetition count for a 430X extended instruction.
+  unsigned getRpt4ImmOpValue(const MCInst &MI, unsigned Op,
+                             SmallVectorImpl<MCFixup> &Fixups,
+                             const MCSubtargetInfo &STI) const;
 
   unsigned getCCOpValue(const MCInst &MI, unsigned Op,
                         SmallVectorImpl<MCFixup> &Fixups,
@@ -209,6 +213,22 @@ MSP430MCCodeEmitter::getRpt2ImmOpValue(const MCInst &MI, unsigned Op,
 
   int64_t Imm = MO.getImm();
   assert((Imm >= 1 && Imm <= 4) && "invalid repetition count");
+  return Imm - 1;
+}
+
+unsigned
+MSP430MCCodeEmitter::getRpt4ImmOpValue(const MCInst &MI, unsigned Op,
+                                       SmallVectorImpl<MCFixup> &Fixups,
+                                       const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(Op);
+  assert(MO.isImm() && "expr operand expected");
+
+  int64_t Imm = MO.getImm();
+  assert((Imm >= 0 && Imm <= 16) && "invalid repetition count");
+  // Imm is zero when there is no repetition count, because the instruction has
+  // been used without the rpt directive.
+  if (Imm == 0)
+    return Imm;
   return Imm - 1;
 }
 

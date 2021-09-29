@@ -12,6 +12,7 @@
 
 #include "MSP430InstPrinter.h"
 #include "MSP430.h"
+#include "MSP430InstrInfo.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
@@ -26,9 +27,29 @@ using namespace llvm;
 #define PRINT_ALIAS_INSTR
 #include "MSP430GenAsmWriter.inc"
 
+/// Print the "rpt" directive and associated repetition count for a 430X
+/// extended instruction that has the repetition flag set.
+static void printRptDirective(const MCInst *MI, raw_ostream &O) {
+  assert(MI->getNumOperands() == 3 && "expected 3 operands");
+
+  const MCOperand &Op = MI->getOperand(2);
+  assert(Op.isImm() && "expected immediate operand for shift count");
+
+  unsigned Cnt = Op.getImm();
+  // Accept a reptition count of 0, for when the instruction was parsed from
+  // assembly, without an rpt directive.
+  if (Cnt == 0 || Cnt == 1)
+    return;
+  O << "\trpt\t#" << Cnt << "\t{";
+}
+
 void MSP430InstPrinter::printInst(const MCInst *MI, uint64_t Address,
                                   StringRef Annot, const MCSubtargetInfo &STI,
                                   raw_ostream &O) {
+  const MCInstrDesc &Desc = MII.get(MI->getOpcode());
+  if (Desc.TSFlags & MSP430TSFlags::RptCount)
+    printRptDirective(MI, O);
+
   if (!printAliasInstr(MI, Address, O))
     printInstruction(MI, Address, O);
   printAnnotation(O, Annot);

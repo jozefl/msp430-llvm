@@ -49,7 +49,9 @@ class MSP430Inst<dag outs, dag ins, int size, string asmstr> : Instruction {
   let Size = size;
 
   bit ExtensionWordFlag = 0;
+  bit RptCountFlag = 0;
   let TSFlags{0} = ExtensionWordFlag;
+  let TSFlags{1} = RptCountFlag;
 }
 
 // MSP430 Double Operand (Format I) Instructions
@@ -475,7 +477,7 @@ class IIExtExcRotForm16<bits<2> opcode, dag outs, dag ins, string asmstr, list<d
 // implemented.
 class ExtensionWordRegForm<bit zc, bit rpt, ALKind al> {
   bits<16> ExtensionWord;
-  bits<4> cnt = 0;
+  bits<4> cnt;
 
   let ExtensionWord{15-9} = 0b0001100;
   let ExtensionWord{8} = zc;

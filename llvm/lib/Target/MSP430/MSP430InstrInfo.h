@@ -29,6 +29,9 @@ enum {
   /// This bit is set if the instruction is an MSP430X extended instruction with
   /// an extension word.
   ExtensionWord = 0x1,
+  /// This bit is set if the instruction uses the reptition count field of the
+  /// the extension word.
+  RptCount = 0x2
 };
 } // namespace MSP430TSFlags
 

@@ -60,6 +60,18 @@ class MSP430AsmParser : public MCTargetAsmParser {
   bool parseJccInstruction(ParseInstructionInfo &Info, StringRef Name,
                            SMLoc NameLoc, OperandVector &Operands);
 
+  /// Parse an rpt directive and the associated 430X extended instruction.
+  ///
+  /// '{' is a separator string, so two formats are accepted:
+  ///   rpt #<cnt> { <mnemonic> <op0> ...
+  /// or
+  ///   rpt #<cnt>
+  ///   <mnemonic> <op0> ...
+  ///
+  /// Returns true on error.
+  bool parseRptDirective(ParseInstructionInfo &Info, StringRef Name,
+                         SMLoc NameLoc, OperandVector &Operands);
+
   bool ParseOperand(OperandVector &Operands);
 
   bool ParseLiteralValues(unsigned Size, SMLoc L);
@@ -181,6 +193,19 @@ public:
       return false;
 
     if (Val >= 1 && Val <= 4)
+      return true;
+
+    return false;
+  }
+
+  /// Return true if the immediate value can be used for a 4-bit reptition
+  /// count after it is encoded.
+  bool isRpt4Imm() const {
+    int64_t Val;
+    if (!isImm() || !Imm->evaluateAsAbsolute(Val))
+      return false;
+
+    if (Val >= 1 && Val <= 16)
       return true;
 
     return false;
@@ -396,6 +421,59 @@ bool MSP430AsmParser::parseJccInstruction(ParseInstructionInfo &Info,
   return false;
 }
 
+bool MSP430AsmParser::parseRptDirective(ParseInstructionInfo &Info,
+                                        StringRef Name, SMLoc NameLoc,
+                                        OperandVector &Operands) {
+  assert(Name.startswith_insensitive("rpt") && "\"rpt\" directive expected");
+
+  SMLoc ExprLoc = getLexer().getLoc();
+  if (!getLexer().is(AsmToken::Hash))
+    return Error(ExprLoc, "expected immediate operand");
+
+  getLexer().Lex();
+
+  const MCExpr *Val;
+  if (getParser().parseExpression(Val))
+    return Error(ExprLoc, "expected expression operand");
+
+  int64_t Res;
+  if (Val->evaluateAsAbsolute(Res))
+    if (Res < 1 || Res > 16)
+      return Error(ExprLoc, "invalid repetition count");
+
+  // The repetition count operand is the second operand to the parsed
+  // instruction, so save it for later.
+  std::unique_ptr<MSP430Operand> CntOp =
+      MSP430Operand::CreateImm(Val, ExprLoc, getLexer().getLoc());
+
+  if (getLexer().isNot(AsmToken::EndOfStatement)) {
+    SMLoc Loc = getLexer().getLoc();
+    getParser().eatToEndOfStatement();
+    return Error(Loc, "expected '{' or a newline after \"rpt #<imm>\"");
+  }
+
+  getParser().eatToEndOfStatement();
+
+  // Get the name of the actual mnemonic.
+  Operands.push_back(MSP430Operand::CreateToken(getLexer().getTok().getString(),
+                                                getLexer().getLoc()));
+  getLexer().Lex();
+
+  // This is the first asm operand to the mnemonic, and to the parsed
+  // instruction.
+  if (ParseOperand(Operands))
+    return true;
+
+  Operands.push_back(std::move(CntOp));
+
+  if (getLexer().isNot(AsmToken::EndOfStatement)) {
+    SMLoc Loc = getLexer().getLoc();
+    getParser().eatToEndOfStatement();
+    return Error(Loc, "only one operand expected");
+  }
+  return false;
+}
+
 bool MSP430AsmParser::ParseInstruction(ParseInstructionInfo &Info,
                                        StringRef Name, SMLoc NameLoc,
                                        OperandVector &Operands) {
@@ -405,6 +483,9 @@ bool MSP430AsmParser::ParseInstruction(ParseInstructionInfo &Info,
 
   if (!parseJccInstruction(Info, Name, NameLoc, Operands))
     return false;
+
+  if (Name.startswith_insensitive("rpt"))
+    return parseRptDirective(Info, Name, NameLoc, Operands);
 
   // First operand is instruction mnemonic
   Operands.push_back(MSP430Operand::CreateToken(Name, NameLoc));
