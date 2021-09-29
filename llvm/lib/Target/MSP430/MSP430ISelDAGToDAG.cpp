@@ -92,12 +92,16 @@ namespace {
   class MSP430DAGToDAGISel : public SelectionDAGISel {
   public:
     MSP430DAGToDAGISel(MSP430TargetMachine &TM, CodeGenOpt::Level OptLevel)
-        : SelectionDAGISel(TM, OptLevel) {}
+        : SelectionDAGISel(TM, OptLevel), Subtarget(nullptr) {}
 
   private:
+    const MSP430Subtarget *Subtarget;
+
     StringRef getPassName() const override {
       return "MSP430 DAG->DAG Pattern Instruction Selection";
     }
+
+    bool runOnMachineFunction(MachineFunction &MF) override;
 
     bool MatchAddress(SDValue N, MSP430ISelAddressMode &AM);
     bool MatchWrapper(SDValue N, MSP430ISelAddressMode &AM);
@@ -119,6 +123,11 @@ namespace {
     bool SelectAddr(SDValue Addr, SDValue &Base, SDValue &Disp);
   };
 }  // end anonymous namespace
+
+bool MSP430DAGToDAGISel::runOnMachineFunction(MachineFunction &MF) {
+  Subtarget = &MF.getSubtarget<MSP430Subtarget>();
+  return SelectionDAGISel::runOnMachineFunction(MF);
+}
 
 /// createMSP430ISelDag - This pass converts a legalized DAG into a
 /// MSP430-specific DAG, ready for instruction scheduling.

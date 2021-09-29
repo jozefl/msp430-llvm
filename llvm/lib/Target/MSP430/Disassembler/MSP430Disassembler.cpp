@@ -102,6 +102,11 @@ static DecodeStatus DecodeGR16RegisterClass(MCInst &MI, uint64_t RegNo,
 static DecodeStatus DecodeCGImm(MCInst &MI, uint64_t Bits, uint64_t Address,
                                 const void *Decoder);
 
+/// Decode the repetition count from the extension word in a 430X extended
+/// instruction.
+static DecodeStatus decodeRptImm(MCInst &MI, uint64_t Bits, uint64_t Address,
+                                 const void *Decoder);
+
 static DecodeStatus DecodeMemOperand(MCInst &MI, uint64_t Bits,
                                      uint64_t Address,
                                      const void *Decoder);
@@ -121,6 +126,15 @@ static DecodeStatus DecodeCGImm(MCInst &MI, uint64_t Bits, uint64_t Address,
   case 0x23: Imm =  2; break;
   case 0x33: Imm = -1; break;
   }
+  MI.addOperand(MCOperand::createImm(Imm));
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus decodeRptImm(MCInst &MI, uint64_t Bits, uint64_t Address,
+                                 const void *Decoder) {
+  if (Bits >= 16)
+    return MCDisassembler::Fail;
+  int64_t Imm = Bits + 1;
   MI.addOperand(MCOperand::createImm(Imm));
   return MCDisassembler::Success;
 }

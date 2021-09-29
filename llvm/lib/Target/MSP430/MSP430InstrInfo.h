@@ -20,6 +20,17 @@
 #include "MSP430GenInstrInfo.inc"
 
 namespace llvm {
+/// Namespace to describe the target-specific flags of an MSP430Inst.
+///
+/// The flag bit positions need to match the TSFlag bits set in the MSP430Inst
+/// TableGen class defined in MSP430InstrFormats.td.
+namespace MSP430TSFlags {
+enum {
+  /// This bit is set if the instruction is an MSP430X extended instruction with
+  /// an extension word.
+  ExtensionWord = 0x1,
+};
+} // namespace MSP430TSFlags
 
 class MSP430Subtarget;
 

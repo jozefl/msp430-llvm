@@ -28,10 +28,17 @@ class DestMode<bit val> {
 def DstReg      : DestMode<0>;   // r
 def DstMem      : DestMode<1>;   // m
 
+class ALKind<bit val> {
+  bit Value = val;
+}
+
+def ALAddr : ALKind<0>;
+def ALWord : ALKind<1>;
+
 // Generic MSP430 Format
 class MSP430Inst<dag outs, dag ins, int size, string asmstr> : Instruction {
-  field bits<48> Inst;
-  field bits<48> SoftFail = 0;
+  field bits<64> Inst;
+  field bits<64> SoftFail = 0;
 
   let Namespace = "MSP430";
 
@@ -40,6 +47,9 @@ class MSP430Inst<dag outs, dag ins, int size, string asmstr> : Instruction {
 
   let AsmString = asmstr;
   let Size = size;
+
+  bit ExtensionWordFlag = 0;
+  let TSFlags{0} = ExtensionWordFlag;
 }
 
 // MSP430 Double Operand (Format I) Instructions
@@ -431,6 +441,84 @@ class CJForm<dag outs, dag ins, string asmstr, list<dag> pattern>
   let Inst{15-13} = 0b001;
   let Inst{12-10} = cond;
   let Inst{9-0} = dst;
+}
+
+// MSP430 Extended Format II Instruction Format Exception - Rotation.
+class IIExtExcRotForm<bits<2> opcode, ALKind al,
+                   dag outs, dag ins, string asmstr, list<dag> pattern>
+  : MSP430Inst<outs, ins, 2, asmstr> {
+  let Pattern = pattern;
+
+  bits<4> rd;
+  bits<2> cnt;
+
+  let Inst{15-12} = 0b0000;
+  let Inst{11-10} = cnt;
+  let Inst{9-8}   = opcode;
+  let Inst{7-5}   = 0b010;
+  let Inst{4}     = al.Value;
+  let Inst{3-0}   = rd;
+}
+
+class IIExtExcRotForm16<bits<2> opcode, dag outs, dag ins, string asmstr, list<dag> pattern>
+  : IIExtExcRotForm<opcode, ALWord, outs, ins, asmstr, pattern>;
+
+// The 430X extension word for register addressing modes.
+//
+// MSP430MCCodeEmitter expects the ExtensionWord field to be positioned at bits
+// [63:48] of the Inst field in the MSP430Inst that the instruction corresponds
+// to. encodeInstruction will rearrange the bits of the instruction to ensure
+// the ExtensionWord is positioned correctly in the final binary encoding.
+//
+// Until the MSP430 large memory model is supported, there's no benefit to using
+// non-register mode extended instructions, so they are not currently
+// implemented.
+class ExtensionWordRegForm<bit zc, bit rpt, ALKind al> {
+  bits<16> ExtensionWord;
+  bits<4> cnt = 0;
+
+  let ExtensionWord{15-9} = 0b0001100;
+  let ExtensionWord{8} = zc;
+  let ExtensionWord{7} = rpt;
+  let ExtensionWord{6} = al.Value;
+  let ExtensionWord{5-4} = 0b00;
+  let ExtensionWord{3-0} = cnt;
+}
+
+class II16rExtended<bits<3> opcode, bit zc, bit rpt,
+                  dag outs, dag ins, string asmstr, list<dag> pattern>
+  : IIForm16<opcode, SrcReg, 4, outs, ins, asmstr, pattern>,
+    ExtensionWordRegForm<zc, rpt, ALWord> {
+  let Pattern = pattern;
+  let ExtensionWordFlag = 1;
+  let Inst{63-48} = ExtensionWord;
+}
+
+class I16rExtended<bits<4> opcode, bit zc, bit rpt,
+                  dag outs, dag ins, string asmstr, list<dag> pattern>
+  : IForm16<opcode, DstReg, SrcReg, 4, outs, ins, asmstr, pattern>,
+    ExtensionWordRegForm<zc, rpt, ALWord> {
+  let Pattern = pattern;
+  let ExtensionWordFlag = 1;
+  let Inst{63-48} = ExtensionWord;
+}
+
+class II8rExtended<bits<3> opcode, bit zc, bit rpt,
+                  dag outs, dag ins, string asmstr, list<dag> pattern>
+  : IIForm8<opcode, SrcReg, 4, outs, ins, asmstr, pattern>,
+    ExtensionWordRegForm<zc, rpt, ALWord> {
+  let Pattern = pattern;
+  let ExtensionWordFlag = 1;
+  let Inst{63-48} = ExtensionWord;
+}
+
+class I8rExtended<bits<4> opcode, bit zc, bit rpt,
+                  dag outs, dag ins, string asmstr, list<dag> pattern>
+  : IForm8<opcode, DstReg, SrcReg, 4, outs, ins, asmstr, pattern>,
+    ExtensionWordRegForm<zc, rpt, ALWord> {
+  let Pattern = pattern;
+  let ExtensionWordFlag = 1;
+  let Inst{63-48} = ExtensionWord;
 }
 
 // Pseudo instructions

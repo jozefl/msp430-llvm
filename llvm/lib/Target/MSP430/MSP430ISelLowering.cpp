@@ -43,7 +43,7 @@ static cl::opt<bool>MSP430NoLegalImmediate(
 
 MSP430TargetLowering::MSP430TargetLowering(const TargetMachine &TM,
                                            const MSP430Subtarget &STI)
-    : TargetLowering(TM) {
+    : TargetLowering(TM), Subtarget(&STI) {
 
   // Set up the register classes.
   addRegisterClass(MVT::i8,  &MSP430::GR8RegClass);

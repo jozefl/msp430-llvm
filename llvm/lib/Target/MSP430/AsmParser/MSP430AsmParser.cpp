@@ -163,14 +163,24 @@ public:
   bool isPostIndReg()     const { return Kind == k_PostIndReg; }
 
   bool isCGImm() const {
-    if (Kind != k_Imm)
-      return false;
-
     int64_t Val;
-    if (!Imm->evaluateAsAbsolute(Val))
+    if (!isImm() || !Imm->evaluateAsAbsolute(Val))
       return false;
     
     if (Val == 0 || Val == 1 || Val == 2 || Val == 4 || Val == 8 || Val == -1)
+      return true;
+
+    return false;
+  }
+
+  /// Return true if the immediate value can be used for a 2-bit reptition
+  /// count after it is encoded.
+  bool isRpt2Imm() const {
+    int64_t Val;
+    if (!isImm() || !Imm->evaluateAsAbsolute(Val))
+      return false;
+
+    if (Val >= 1 && Val <= 4)
       return true;
 
     return false;

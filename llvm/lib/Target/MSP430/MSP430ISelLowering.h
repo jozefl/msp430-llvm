@@ -71,6 +71,8 @@ namespace llvm {
 
   class MSP430Subtarget;
   class MSP430TargetLowering : public TargetLowering {
+    const MSP430Subtarget *Subtarget;
+
   public:
     explicit MSP430TargetLowering(const TargetMachine &TM,
                                   const MSP430Subtarget &STI);

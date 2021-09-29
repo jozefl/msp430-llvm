@@ -10,9 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MSP430.h"
-#include "MCTargetDesc/MSP430MCTargetDesc.h"
 #include "MCTargetDesc/MSP430FixupKinds.h"
+#include "MCTargetDesc/MSP430MCTargetDesc.h"
+#include "MSP430.h"
+#include "MSP430InstrInfo.h"
 
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/SmallVector.h"
@@ -66,6 +67,12 @@ class MSP430MCCodeEmitter : public MCCodeEmitter {
                            SmallVectorImpl<MCFixup> &Fixups,
                            const MCSubtargetInfo &STI) const;
 
+  /// Encode the repetition count for a 430X extended format exception
+  /// instruction.
+  unsigned getRpt2ImmOpValue(const MCInst &MI, unsigned Op,
+                             SmallVectorImpl<MCFixup> &Fixups,
+                             const MCSubtargetInfo &STI) const;
+
   unsigned getCCOpValue(const MCInst &MI, unsigned Op,
                         SmallVectorImpl<MCFixup> &Fixups,
                         const MCSubtargetInfo &STI) const;
@@ -79,6 +86,15 @@ public:
                          const MCSubtargetInfo &STI) const override;
 };
 
+/// Move the extension word from the last word of the 64-bit encoded value, to
+/// the first word of the encoded value.
+static uint64_t fixExtensionWord(uint64_t EncodedValue) {
+  uint64_t ExtensionWord = EncodedValue >> 48;
+  EncodedValue <<= 16;
+  EncodedValue |= ExtensionWord;
+  return EncodedValue;
+}
+
 void MSP430MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
                                             SmallVectorImpl<MCFixup> &Fixups,
                                             const MCSubtargetInfo &STI) const {
@@ -87,9 +103,12 @@ void MSP430MCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   unsigned Size = Desc.getSize();
 
   // Initialize fixup offset
-  Offset = 2;
+  Offset = ((Desc.TSFlags & MSP430TSFlags::ExtensionWord) ? 4 : 2);
 
   uint64_t BinaryOpCode = getBinaryCodeForInstr(MI, Fixups, STI);
+  if (Desc.TSFlags & MSP430TSFlags::ExtensionWord)
+    BinaryOpCode = fixExtensionWord(BinaryOpCode);
+
   size_t WordCount = Size / 2;
 
   while (WordCount--) {
@@ -179,6 +198,18 @@ unsigned MSP430MCCodeEmitter::getCGImmOpValue(const MCInst &MI, unsigned Op,
   case 2:  return 0x23;
   case -1: return 0x33;
   }
+}
+
+unsigned
+MSP430MCCodeEmitter::getRpt2ImmOpValue(const MCInst &MI, unsigned Op,
+                                       SmallVectorImpl<MCFixup> &Fixups,
+                                       const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(Op);
+  assert(MO.isImm() && "expr operand expected");
+
+  int64_t Imm = MO.getImm();
+  assert((Imm >= 1 && Imm <= 4) && "invalid repetition count");
+  return Imm - 1;
 }
 
 unsigned MSP430MCCodeEmitter::getCCOpValue(const MCInst &MI, unsigned Op,
