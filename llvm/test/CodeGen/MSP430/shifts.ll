@@ -68,8 +68,7 @@ entry:
 ; CHECK-LABEL: lshr10_i16:
 ; CHECK:      swpb	r12
 ; CHECK-NEXT: mov.b	r12, r12
-; CHECK-NEXT: clrc
-; CHECK-NEXT: rrc	r12
+; CHECK-NEXT: rra	r12
 ; CHECK-NEXT: rra	r12
   %shr = lshr i16 %a, 10
   ret i16 %shr

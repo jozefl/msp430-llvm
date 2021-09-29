@@ -20,54 +20,63 @@
 
 namespace llvm {
   namespace MSP430ISD {
-    enum NodeType : unsigned {
-      FIRST_NUMBER = ISD::BUILTIN_OP_END,
+  enum NodeType : unsigned {
+    FIRST_NUMBER = ISD::BUILTIN_OP_END,
 
-      /// Return with a flag operand. Operand 0 is the chain operand.
-      RET_FLAG,
+    /// Return with a flag operand. Operand 0 is the chain operand.
+    RET_FLAG,
 
-      /// Same as RET_FLAG, but used for returning from ISRs.
-      RETI_FLAG,
+    /// Same as RET_FLAG, but used for returning from ISRs.
+    RETI_FLAG,
 
-      /// Y = R{R,L}A X, rotate right (left) arithmetically
-      RRA, RLA,
+    /// Y = R{R,L}A X, rotate right (left) arithmetically
+    RRA,
+    RLA,
 
-      /// Y = RRC X, rotate right via carry
-      RRC,
+    /// Y = RRC X, rotate right via carry
+    RRC,
 
-      /// Rotate right via carry, carry gets cleared beforehand by clrc
-      RRCL,
+    /// Rotate right via carry, carry gets cleared beforehand by clrc
+    RRCL,
 
-      /// CALL - These operations represent an abstract call
-      /// instruction, which includes a bunch of information.
-      CALL,
+    /// CALL - These operations represent an abstract call
+    /// instruction, which includes a bunch of information.
+    CALL,
 
-      /// Wrapper - A wrapper node for TargetConstantPool, TargetExternalSymbol,
-      /// and TargetGlobalAddress.
-      Wrapper,
+    /// Wrapper - A wrapper node for TargetConstantPool, TargetExternalSymbol,
+    /// and TargetGlobalAddress.
+    Wrapper,
 
-      /// CMP - Compare instruction.
-      CMP,
+    /// CMP - Compare instruction.
+    CMP,
 
-      /// SetCC - Operand 0 is condition code, and operand 1 is the flag
-      /// operand produced by a CMP instruction.
-      SETCC,
+    /// SetCC - Operand 0 is condition code, and operand 1 is the flag
+    /// operand produced by a CMP instruction.
+    SETCC,
 
-      /// MSP430 conditional branches. Operand 0 is the chain operand, operand 1
-      /// is the block to branch if condition is true, operand 2 is the
-      /// condition code, and operand 3 is the flag operand produced by a CMP
-      /// instruction.
-      BR_CC,
+    /// MSP430 conditional branches. Operand 0 is the chain operand, operand 1
+    /// is the block to branch if condition is true, operand 2 is the
+    /// condition code, and operand 3 is the flag operand produced by a CMP
+    /// instruction.
+    BR_CC,
 
-      /// SELECT_CC - Operand 0 and operand 1 are selection variable, operand 3
-      /// is condition code and operand 4 is flag operand.
-      SELECT_CC,
+    /// SELECT_CC - Operand 0 and operand 1 are selection variable, operand 3
+    /// is condition code and operand 4 is flag operand.
+    SELECT_CC,
 
-      /// DADD - Decimal addition with carry
-      /// TODO Nothing generates a node of this type yet.
-      DADD,
-    };
-  }
+    /// DADD - Decimal addition with carry
+    /// TODO Nothing generates a node of this type yet.
+    DADD,
+
+    /// Extended versions of the shift instructions, supported by the 430X CPU.
+    RRAM,
+    RRUM,
+    RLAM,
+    RRAX,
+    RLAX,
+    RRUX
+  };
+  } // namespace MSP430ISD
 
   class MSP430Subtarget;
   class MSP430TargetLowering : public TargetLowering {

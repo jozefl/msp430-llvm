@@ -18,6 +18,16 @@
 // required in the small memory model, and have increased size/cycle count
 // compared to their 430 versions.
 
+def MSP430rram     : SDNode<"MSP430ISD::RRAM", SDTIntShiftOp>;
+def MSP430rrum     : SDNode<"MSP430ISD::RRUM", SDTIntShiftOp>;
+def MSP430rlam     : SDNode<"MSP430ISD::RLAM", SDTIntShiftOp>;
+
+def MSP430rrax     : SDNode<"MSP430ISD::RRAX", SDTIntShiftOp>;
+def MSP430rlax     : SDNode<"MSP430ISD::RLAX", SDTIntShiftOp>;
+def MSP430rrux     : SDNode<"MSP430ISD::RRUX", SDTIntShiftOp>;
+
+// Differentiate between rpt2 and rpt4 to catch shift counts in IIExtExcRot
+// instructions that are too large.
 def Rpt2ImmAsmOperand : AsmOperandClass {
   let Name = "Rpt2Imm";
   let RenderMethod = "addImmOperands";
@@ -47,43 +57,53 @@ def rpt4imm : Operand<i8>,
 //
 let Predicates = [HasMSP430X] in {
 let Constraints = "$rs = $rd", Defs = [SR] in {
-  multiclass IIExtExcRot<string Mnemonic, bits<2> OpCode> {
+  multiclass IIExtExcRot<string Mnemonic, bits<2> OpCode, SDNode OpNode> {
     def _16 : IIExtExcRotForm16<OpCode,
                                 (outs GR16:$rd), (ins GR16:$rs, rpt2imm:$cnt),
-                                !strconcat(Mnemonic, "\t$cnt, $rd"), []>;
+                                !strconcat(Mnemonic, "\t$cnt, $rd"),
+                                [(set GR16:$rd, (OpNode GR16:$rs, (i8 rpt2imm:$cnt))),
+                                (implicit SR)]>;
   }
 
-  defm RRAM : IIExtExcRot<"rram", 0b01>;
-  defm RRUM : IIExtExcRot<"rrum", 0b11>;
-  defm RLAM : IIExtExcRot<"rlam", 0b10>;
+  defm RRAM : IIExtExcRot<"rram", 0b01, MSP430rram>;
+  defm RRUM : IIExtExcRot<"rrum", 0b11, MSP430rrum>;
+  defm RLAM : IIExtExcRot<"rlam", 0b10, MSP430rlam>;
 
-  multiclass IIExtRot<string Mnemonic, bits<3> OpCode, bit ZC> {
+  multiclass IIExtRot<string Mnemonic, bits<3> OpCode, bit ZC, SDNode OpNode> {
     let RptCountFlag = 1 in {
       def _8  :  II8rExtended<OpCode, ZC, 0,
                               (outs GR8:$rd), (ins GR8:$rs, rpt4imm:$cnt),
-                              !strconcat(Mnemonic, ".b\t$rd"), []>;
+                              !strconcat(Mnemonic, ".b\t$rd"),
+                              [(set GR8:$rd, (OpNode GR8:$rs, (i8 rpt4imm:$cnt))),
+                              (implicit SR)]>;
       def _16 : II16rExtended<OpCode, ZC, 0,
                               (outs GR16:$rd), (ins GR16:$rs, rpt4imm:$cnt),
-                              !strconcat(Mnemonic, "\t$rd"), []>;
+                              !strconcat(Mnemonic, "\t$rd"),
+                              [(set GR16:$rd, (OpNode GR16:$rs, (i8 rpt4imm:$cnt))),
+                              (implicit SR)]>;
     }
   }
-  defm RRAX : IIExtRot<"rrax", 0b010, 0>;
+  defm RRAX : IIExtRot<"rrax", 0b010, 0, MSP430rrax>;
   // RRUX is encoded as RRCX with the ZC flag set.
-  defm RRUX : IIExtRot<"rrux", 0b000, 1>;
+  defm RRUX : IIExtRot<"rrux", 0b000, 1, MSP430rrux>;
 
-  multiclass IExtRot<string Mnemonic, bits<4> OpCode> {
+  multiclass IExtRot<string Mnemonic, bits<4> OpCode, SDNode OpNode> {
     let RptCountFlag = 1 in {
       def _8  :  I8rExtended<OpCode, 0, 0,
                               (outs GR8:$rd), (ins GR8:$rs, rpt4imm:$cnt),
-                              !strconcat(Mnemonic, ".b\t$rd"), []>;
+                              !strconcat(Mnemonic, ".b\t$rd"),
+                              [(set GR8:$rd, (OpNode GR8:$rs, (i8 rpt4imm:$cnt))),
+                              (implicit SR)]>;
       def _16 : I16rExtended<OpCode, 0, 0,
                               (outs GR16:$rd), (ins GR16:$rs, rpt4imm:$cnt),
-                              !strconcat(Mnemonic, "\t$rd"), []>;
+                              !strconcat(Mnemonic, "\t$rd"),
+                              [(set GR16:$rd, (OpNode GR16:$rs, (i8 rpt4imm:$cnt))),
+                              (implicit SR)]>;
     }
   }
 
   // RLAX is encoded as ADDX.
-  defm RLAX : IExtRot<"rlax", 0b0101>;
+  defm RLAX : IExtRot<"rlax", 0b0101, MSP430rlax>;
 
 } // Defs = [SR], Constraints = "$rs = $rd"
 

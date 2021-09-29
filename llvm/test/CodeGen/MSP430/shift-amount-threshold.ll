@@ -199,8 +199,7 @@ define i16 @testShiftAnd_1_sh9(i16 %x) {
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    swpb r12
 ; CHECK-NEXT:    mov.b r12, r12
-; CHECK-NEXT:    clrc
-; CHECK-NEXT:    rrc r12
+; CHECK-NEXT:    rra r12
 ; CHECK-NEXT:    and #64, r12
 ; CHECK-NEXT:    ret
 entry:

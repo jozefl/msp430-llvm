@@ -360,7 +360,8 @@ SDValue MSP430TargetLowering::LowerOperation(SDValue Op,
 // Define non profitable transforms into shifts
 bool MSP430TargetLowering::shouldAvoidTransformToShift(EVT VT,
                                                        unsigned Amount) const {
-  return !(Amount == 8 || Amount == 9 || Amount<=2);
+  return !(Subtarget->hasMSP430X() || Amount == 8 || Amount == 9 ||
+           Amount <= 2);
 }
 
 // Implemented to verify test case assertions in
@@ -953,57 +954,181 @@ SDValue MSP430TargetLowering::LowerCallResult(
   return Chain;
 }
 
-SDValue MSP430TargetLowering::LowerShifts(SDValue Op,
-                                          SelectionDAG &DAG) const {
+/// Efficiently lower a shift count of 8 by swapping bytes of the value to be
+/// shifted, instead of using shift instructions.
+static SDValue shiftBy8(SDValue Op, SelectionDAG &DAG) {
   unsigned Opc = Op.getOpcode();
-  SDNode* N = Op.getNode();
   EVT VT = Op.getValueType();
-  SDLoc dl(N);
+  SDLoc Dl(Op);
+  SDValue Victim = Op.getOperand(0);
 
-  // Expand non-constant shifts to loops:
-  if (!isa<ConstantSDNode>(N->getOperand(1)))
-    return Op;
+  switch (Opc) {
+  default:
+    llvm_unreachable("Unknown shift");
+  case ISD::SHL:
+    // foo << (8 + N) => swpb(zext(foo)) << N
+    Victim = DAG.getZeroExtendInReg(Victim, Dl, MVT::i8);
+    Victim = DAG.getNode(ISD::BSWAP, Dl, VT, Victim);
+    break;
+  case ISD::SRA:
+  case ISD::SRL:
+    // foo >> (8 + N) => sxt(swpb(foo)) >> N
+    Victim = DAG.getNode(ISD::BSWAP, Dl, VT, Victim);
+    Victim = (Opc == ISD::SRA) ? DAG.getNode(ISD::SIGN_EXTEND_INREG, Dl, VT,
+                                             Victim, DAG.getValueType(MVT::i8))
+                               : DAG.getZeroExtendInReg(Victim, Dl, MVT::i8);
+    break;
+  }
+  return Victim;
+}
 
-  uint64_t ShiftAmount = cast<ConstantSDNode>(N->getOperand(1))->getZExtValue();
-
-  // Expand the stuff into sequence of shifts.
-  SDValue Victim = N->getOperand(0);
+/// Lower shifts of byte or word-sized operands, using the 430 instructions RRC,
+/// RLA and RRA.
+static SDValue lowerShiftToRxx(SDValue Op, SelectionDAG &DAG) {
+  unsigned Opc = Op.getOpcode();
+  EVT VT = Op.getValueType();
+  SDLoc Dl(Op);
+  SDValue Victim = Op.getOperand(0);
+  assert(isa<ConstantSDNode>(Op.getOperand(1)));
+  int ShiftAmount = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
 
   if (ShiftAmount >= 8) {
-    assert(VT == MVT::i16 && "Can not shift i8 by 8 and more");
-    switch(Opc) {
-    default:
-      llvm_unreachable("Unknown shift");
-    case ISD::SHL:
-      // foo << (8 + N) => swpb(zext(foo)) << N
-      Victim = DAG.getZeroExtendInReg(Victim, dl, MVT::i8);
-      Victim = DAG.getNode(ISD::BSWAP, dl, VT, Victim);
-      break;
-    case ISD::SRA:
-    case ISD::SRL:
-      // foo >> (8 + N) => sxt(swpb(foo)) >> N
-      Victim = DAG.getNode(ISD::BSWAP, dl, VT, Victim);
-      Victim = (Opc == ISD::SRA)
-                   ? DAG.getNode(ISD::SIGN_EXTEND_INREG, dl, VT, Victim,
-                                 DAG.getValueType(MVT::i8))
-                   : DAG.getZeroExtendInReg(Victim, dl, MVT::i8);
-      break;
-    }
+    Victim = shiftBy8(Op, DAG);
+    // For SRL, the top byte is now 0, so we can go straight to emitting RRA.
+    // CLRC, RRC is not required.
     ShiftAmount -= 8;
-  }
-
-  if (Opc == ISD::SRL && ShiftAmount) {
+  } else if (Opc == ISD::SRL) {
     // Emit a special goodness here:
     // srl A, 1 => clrc; rrc A
-    Victim = DAG.getNode(MSP430ISD::RRCL, dl, VT, Victim);
+    Victim = DAG.getNode(MSP430ISD::RRCL, Dl, VT, Victim);
     ShiftAmount -= 1;
   }
 
   while (ShiftAmount--)
     Victim = DAG.getNode((Opc == ISD::SHL ? MSP430ISD::RLA : MSP430ISD::RRA),
-                         dl, VT, Victim);
-
+                         Dl, VT, Victim);
   return Victim;
+}
+
+/// Lower shifts of byte or word-sized operands, using the 430X extended
+/// instructions RLAX, RRUX and RRAX.
+static SDValue lowerShiftToRxxX(SDValue Op, SelectionDAG &DAG) {
+  EVT VT = Op.getValueType();
+  SDLoc Dl(Op);
+  SDValue Victim = Op.getOperand(0);
+  assert(isa<ConstantSDNode>(Op.getOperand(1)));
+  int ShiftAmount = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
+
+  if (ShiftAmount == 8)
+    return shiftBy8(Op, DAG);
+
+  switch (Op.getOpcode()) {
+  case ISD::SHL:
+    return DAG.getNode(MSP430ISD::RLAX, Dl, VT, Victim,
+                       DAG.getConstant(ShiftAmount, Dl, MVT::i8));
+  case ISD::SRA:
+    return DAG.getNode(MSP430ISD::RRAX, Dl, VT, Victim,
+                       DAG.getConstant(ShiftAmount, Dl, MVT::i8));
+  case ISD::SRL:
+    return DAG.getNode(MSP430ISD::RRUX, Dl, VT, Victim,
+                       DAG.getConstant(ShiftAmount, Dl, MVT::i8));
+  default:
+    llvm_unreachable("unhandled shift instruction");
+  }
+}
+
+/// Lower shifts of word-sized operands, using the 430X extended
+/// format exception instructions RLAM, RRUM and RRAM.
+static SDValue lowerShiftToRxxM(SDValue Op, SelectionDAG &DAG) {
+  assert(Op.getValueSizeInBits() == 16 &&
+         "can only lower shifts to RxxM for word-sized ops");
+  EVT VT = Op.getValueType();
+  SDLoc Dl(Op);
+  SDValue Victim = Op.getOperand(0);
+  assert(isa<ConstantSDNode>(Op.getOperand(1)));
+  int ShiftAmount = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
+
+  if (ShiftAmount > 8) {
+    Victim = shiftBy8(Op, DAG);
+    ShiftAmount -= 8;
+  }
+
+  while (ShiftAmount > 0) {
+    int CurrentShiftAmount = ShiftAmount;
+    if (CurrentShiftAmount > 4)
+      CurrentShiftAmount = 4;
+
+    switch (Op.getOpcode()) {
+    case ISD::SHL:
+      Victim = DAG.getNode(MSP430ISD::RLAM, Dl, VT, Victim,
+                           DAG.getConstant(CurrentShiftAmount, Dl, MVT::i8));
+      break;
+    case ISD::SRA:
+      Victim = DAG.getNode(MSP430ISD::RRAM, Dl, VT, Victim,
+                           DAG.getConstant(CurrentShiftAmount, Dl, MVT::i8));
+      break;
+    case ISD::SRL:
+      Victim = DAG.getNode(MSP430ISD::RRUM, Dl, VT, Victim,
+                           DAG.getConstant(CurrentShiftAmount, Dl, MVT::i8));
+      break;
+    default:
+      llvm_unreachable("unhandled shift instruction");
+      break;
+    }
+    ShiftAmount -= CurrentShiftAmount;
+  }
+  return Victim;
+}
+
+SDValue MSP430TargetLowering::LowerShifts(SDValue Op, SelectionDAG &DAG) const {
+
+  // Expand non-constant shifts to loops.
+  //
+  // TODO: For the MSP430X CPU, if the non-constant shift amount is in a
+  // register, we can use the RPT flag in the extension word to shift by the
+  // amount stored in the register, without using loops.
+  if (!isa<ConstantSDNode>(Op.getOperand(1)))
+    return Op;
+
+  // Let the middle-end handle shifts of 32-bit/64-bit operands.
+  TypeSize OpSize = Op.getValueSizeInBits();
+  if (OpSize > 16)
+    return Op;
+
+  if (!Subtarget->hasMSP430X())
+    return lowerShiftToRxx(Op, DAG);
+
+  int ShiftAmount = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
+  if (ShiftAmount == 1) {
+    // SRL -> RRC requires a CLRC first, for a total of 2 words. We can do it in
+    // 1 word with RRUM.
+    //
+    // TODO: If op0 is not a register, it would be more efficient to use an Rxx
+    // shift.
+    if (OpSize == 16 && Op.getOpcode() == ISD::SRL)
+      return lowerShiftToRxxM(Op, DAG);
+    return lowerShiftToRxx(Op, DAG);
+  }
+  if (ShiftAmount == 8)
+    return shiftBy8(Op, DAG);
+  if (OpSize == 8) {
+    // RxxM shifts can't handle byte-sized operands.
+    return lowerShiftToRxxX(Op, DAG);
+  }
+
+  // Even though RxxM can only shift by <= 4, for shift counts < 8 it's cheaper
+  // to chain the RxxM shifts than to use the RxxX shifts with rpt. This saves
+  // one cycle and uses the same number of words.
+  //
+  // Only when not optimizing for size, use shiftBy8 followed by an RxxM chain
+  // to shift by > 8. Compared to using an RxxX insn, this saves 7 cycles but
+  // adds 2 words.
+  if (Op.getValueSizeInBits() == 16 &&
+      (ShiftAmount < 8 || !DAG.getMachineFunction().getFunction().hasOptSize()))
+    return lowerShiftToRxxM(Op, DAG);
+
+  assert(OpSize == 16 && ShiftAmount > 8);
+  return lowerShiftToRxxX(Op, DAG);
 }
 
 SDValue MSP430TargetLowering::LowerGlobalAddress(SDValue Op,
@@ -1366,20 +1491,46 @@ bool MSP430TargetLowering::getPostIndexedAddressParts(SDNode *N, SDNode *Op,
 
 const char *MSP430TargetLowering::getTargetNodeName(unsigned Opcode) const {
   switch ((MSP430ISD::NodeType)Opcode) {
-  case MSP430ISD::FIRST_NUMBER:       break;
-  case MSP430ISD::RET_FLAG:           return "MSP430ISD::RET_FLAG";
-  case MSP430ISD::RETI_FLAG:          return "MSP430ISD::RETI_FLAG";
-  case MSP430ISD::RRA:                return "MSP430ISD::RRA";
-  case MSP430ISD::RLA:                return "MSP430ISD::RLA";
-  case MSP430ISD::RRC:                return "MSP430ISD::RRC";
-  case MSP430ISD::RRCL:               return "MSP430ISD::RRCL";
-  case MSP430ISD::CALL:               return "MSP430ISD::CALL";
-  case MSP430ISD::Wrapper:            return "MSP430ISD::Wrapper";
-  case MSP430ISD::BR_CC:              return "MSP430ISD::BR_CC";
-  case MSP430ISD::CMP:                return "MSP430ISD::CMP";
-  case MSP430ISD::SETCC:              return "MSP430ISD::SETCC";
-  case MSP430ISD::SELECT_CC:          return "MSP430ISD::SELECT_CC";
-  case MSP430ISD::DADD:               return "MSP430ISD::DADD";
+  case MSP430ISD::FIRST_NUMBER:
+    break;
+  case MSP430ISD::RET_FLAG:
+    return "MSP430ISD::RET_FLAG";
+  case MSP430ISD::RETI_FLAG:
+    return "MSP430ISD::RETI_FLAG";
+  case MSP430ISD::RRA:
+    return "MSP430ISD::RRA";
+  case MSP430ISD::RLA:
+    return "MSP430ISD::RLA";
+  case MSP430ISD::RRC:
+    return "MSP430ISD::RRC";
+  case MSP430ISD::RRCL:
+    return "MSP430ISD::RRCL";
+  case MSP430ISD::CALL:
+    return "MSP430ISD::CALL";
+  case MSP430ISD::Wrapper:
+    return "MSP430ISD::Wrapper";
+  case MSP430ISD::BR_CC:
+    return "MSP430ISD::BR_CC";
+  case MSP430ISD::CMP:
+    return "MSP430ISD::CMP";
+  case MSP430ISD::SETCC:
+    return "MSP430ISD::SETCC";
+  case MSP430ISD::SELECT_CC:
+    return "MSP430ISD::SELECT_CC";
+  case MSP430ISD::DADD:
+    return "MSP430ISD::DADD";
+  case MSP430ISD::RRAM:
+    return "MSP430ISD::RRAM";
+  case MSP430ISD::RRUM:
+    return "MSP430ISD::RRUM";
+  case MSP430ISD::RLAM:
+    return "MSP430ISD::RLAM";
+  case MSP430ISD::RRAX:
+    return "MSP430ISD::RRAX";
+  case MSP430ISD::RLAX:
+    return "MSP430ISD::RLAX";
+  case MSP430ISD::RRUX:
+    return "MSP430ISD::RRUX";
   }
   return nullptr;
 }
