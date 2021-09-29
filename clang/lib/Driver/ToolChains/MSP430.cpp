@@ -117,14 +117,38 @@ static void addHWMultFeature(const Driver &D, const ArgList &Args,
                          .Case("f5series", "+hwmultf5"));
 }
 
-/// Process the -mmcu= and -mhwmult= options to determine the target features.
+/// Emit a warning if the \p SelectedCPU value passed to -mcpu= does not match
+/// the \p SupportedCPU extracted from the MCU data for the MCU selected with
+/// -mmcu=.
 ///
-/// This is the only time Clang will warn about conflicts between these options,
-/// or issues with the values passed to them.
+/// Clang's generic option processing handles invalid values passed to -mcpu=.
+static void validateSelectedCPU(const Driver &D, StringRef SelectedCPU,
+                                StringRef SupportedCPU) {
+  if (SelectedCPU == "generic")
+    SelectedCPU = "msp430";
+  if (SelectedCPU != SupportedCPU)
+    D.Diag(clang::diag::warn_drv_msp430_cpu_mismatch)
+        << SupportedCPU << SelectedCPU;
+}
+
+/// Return the supported CPU for the given MCU.
+///
+/// If the MCU is not valid, Clang has already emitted a warning, so just return
+/// the default "msp430" CPU.
+std::string msp430::getMSP430CPUFromMCU(StringRef MCU) {
+  return std::string(getMCUData(MCU).CPU);
+}
+
+/// Process the -mmcu=, -mcpu= and -mhwmult= options to determine the target
+/// features.
+///
+/// Emit warnings if the selected MCU does not support the selected CPU or
+/// hardware multiply version.
 void msp430::getMSP430TargetFeatures(const Driver &D, const ArgList &Args,
                                      std::vector<StringRef> &Features) {
   const Arg *MCUArg = Args.getLastArg(options::OPT_mmcu_EQ);
   StringRef SupportedHWMult;
+
   if (MCUArg) {
     MCUData LoadedMCUData = getMCUData(MCUArg->getValue());
     if (!LoadedMCUData.isValid()) {
@@ -132,6 +156,8 @@ void msp430::getMSP430TargetFeatures(const Driver &D, const ArgList &Args,
       return;
     }
     SupportedHWMult = LoadedMCUData.HWMult;
+    if (const Arg *CPUArg = Args.getLastArg(options::OPT_mcpu_EQ))
+      validateSelectedCPU(D, CPUArg->getValue(), LoadedMCUData.CPU);
   }
 
   addHWMultFeature(D, Args, SupportedHWMult, Features);

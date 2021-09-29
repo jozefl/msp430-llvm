@@ -8,6 +8,8 @@
 ; RUN:   | llvm-readelf -A - | FileCheck %s --check-prefixes COMMON,MSP430,SMALL
 ; RUN: llc -mtriple=msp430 -mcpu=msp430x -filetype=obj < %s \
 ; RUN:   | llvm-readelf -A - | FileCheck %s --check-prefixes COMMON,MSP430X,SMALL
+; RUN: llc -mtriple=msp430 -mcpu=msp430xv2 -filetype=obj < %s \
+; RUN:   | llvm-readelf -A - | FileCheck %s --check-prefixes COMMON,MSP430X,SMALL
 
 ; COMMON: BuildAttributes {
 ; COMMON: FormatVersion: 0x41

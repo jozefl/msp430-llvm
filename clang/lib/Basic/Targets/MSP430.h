@@ -23,6 +23,8 @@ namespace targets {
 
 class LLVM_LIBRARY_VISIBILITY MSP430TargetInfo : public TargetInfo {
   static const char *const GCCRegNames[];
+  static const llvm::StringLiteral ValidCPUNames[4];
+  std::string CPU;
 
 public:
   MSP430TargetInfo(const llvm::Triple &Triple, const TargetOptions &)
@@ -57,8 +59,21 @@ public:
 
   bool allowsLargerPreferedTypeAlignment() const override { return false; }
 
+  /// Check for support of feature \p Feature.
+  ///
+  /// Currently only the driver needs to know about hwmult features, so checking
+  /// their availability here is not required.
   bool hasFeature(StringRef Feature) const override {
-    return Feature == "msp430";
+    assert(Feature != "hwmult16" && Feature != "hwmult32" &&
+           Feature != "hwmultf5" && "unexpected check of hwmult feature");
+    if (Feature == "msp430")
+      return true;
+    if (Feature == "msp430x")
+      return llvm::StringSwitch<bool>(CPU)
+          .Case("msp430x", true)
+          .Case("msp430xv2", true)
+          .Default(false);
+    return false;
   }
 
   ArrayRef<const char *> getGCCRegNames() const override;
@@ -95,6 +110,29 @@ public:
   BuiltinVaListKind getBuiltinVaListKind() const override {
     // FIXME: implement
     return TargetInfo::CharPtrBuiltinVaList;
+  }
+
+  bool
+  initFeatureMap(llvm::StringMap<bool> &Features, DiagnosticsEngine &Diags,
+                 StringRef CPU,
+                 const std::vector<std::string> &FeaturesVec) const override {
+    Features["msp430x"] = hasFeature("msp430x");
+    return TargetInfo::initFeatureMap(Features, Diags, CPU, FeaturesVec);
+  }
+
+  bool setCPU(const std::string &Name) override {
+    if (!isValidCPUName(Name))
+      return false;
+    CPU = Name;
+    return true;
+  }
+
+  void fillValidCPUList(SmallVectorImpl<StringRef> &Values) const override {
+    Values.append(std::begin(ValidCPUNames), std::end(ValidCPUNames));
+  }
+
+  bool isValidCPUName(StringRef Name) const override {
+    return llvm::find(ValidCPUNames, Name) != std::end(ValidCPUNames);
   }
 };
 

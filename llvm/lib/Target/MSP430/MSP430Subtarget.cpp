@@ -40,9 +40,6 @@ void MSP430Subtarget::anchor() { }
 
 MSP430Subtarget &
 MSP430Subtarget::initializeSubtargetDependencies(StringRef CPU, StringRef FS) {
-  ExtendedInsts = false;
-  HWMultMode = NoHWMult;
-
   StringRef CPUName = CPU;
   if (CPUName.empty())
     CPUName = "msp430";

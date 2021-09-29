@@ -21,6 +21,9 @@ const char *const MSP430TargetInfo::GCCRegNames[] = {
     "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"
 };
 
+constexpr llvm::StringLiteral MSP430TargetInfo::ValidCPUNames[4] = {
+    {"generic"}, {"msp430"}, {"msp430x"}, {"msp430xv2"}};
+
 ArrayRef<const char *> MSP430TargetInfo::getGCCRegNames() const {
   return llvm::makeArrayRef(GCCRegNames);
 }
@@ -31,4 +34,6 @@ void MSP430TargetInfo::getTargetDefines(const LangOptions &Opts,
   Builder.defineMacro("__MSP430__");
   Builder.defineMacro("__ELF__");
   // FIXME: defines for different 'flavours' of MCU
+  if (hasFeature("msp430x"))
+    Builder.defineMacro("__MSP430X__");
 }

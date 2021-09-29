@@ -64,8 +64,6 @@
 // MISC-FLAGS-2-NEG-NOT: "-z"
 // MISC-FLAGS-2-NEG-NOT: "--relax"
 
-// Tests for -nostdlib, -nostartfiles, -nodefaultfiles and -f(no-)exceptions
-
 // RUN: %clang %s -### -no-canonical-prefixes -target msp430 -rtlib=libgcc \
 // RUN:   --sysroot="%S/Inputs/basic_msp430_tree" > %t 2>&1
 // RUN: FileCheck -check-prefix=LIBS-DEFAULT-POS %s < %t
@@ -112,6 +110,7 @@
 // LIBS-COMPILER-RT-NEG-NOT: crtend.o
 // LIBS-COMPILER-RT-NEG-NOT: /exceptions
 
+// Tests for -mcpu=msp430x(v2) and -f(no-)exceptions.
 // RUN: %clang %s -### -no-canonical-prefixes -target msp430 -rtlib=libgcc -fexceptions \
 // RUN:   --sysroot="%S/Inputs/basic_msp430_tree" > %t 2>&1
 // RUN: FileCheck -check-prefix=LIBS-EXC-POS %s < %t
@@ -126,6 +125,44 @@
 // LIBS-EXC-NEG-NOT: "{{.*}}/430"
 // LIBS-EXC-NEG-NOT: "{{.*}}430/crt{{.*}}"
 
+// RUN: %clang %s -### -no-canonical-prefixes -target msp430 -rtlib=libgcc -mcpu=msp430x \
+// RUN:   --sysroot="%S/Inputs/basic_msp430_tree" > %t 2>&1
+// RUN: FileCheck -check-prefix=LIBS-430X-POS %s < %t
+// RUN: FileCheck -check-prefix=LIBS-430X-NEG %s < %t
+// RUN: %clang %s -### -no-canonical-prefixes -target msp430 -rtlib=libgcc -mcpu=msp430xv2 \
+// RUN:   --sysroot="%S/Inputs/basic_msp430_tree" > %t 2>&1
+// RUN: FileCheck -check-prefix=LIBS-430X-POS %s < %t
+// RUN: FileCheck -check-prefix=LIBS-430X-NEG %s < %t
+// LIBS-430X-POS: "{{.*}}/Inputs/basic_msp430_tree/lib/gcc/msp430-elf/8.3.1/../../..{{/|\\\\}}..{{/|\\\\}}bin{{/|\\\\}}msp430-elf-ld"
+// LIBS-430X-POS: "{{.*}}/Inputs/basic_msp430_tree{{/|\\\\}}msp430-elf{{/|\\\\}}lib{{/|\\\\}}crt0.o"
+// LIBS-430X-POS: "{{.*}}/Inputs/basic_msp430_tree/lib/gcc/msp430-elf/8.3.1{{/|\\\\}}crtbegin_no_eh.o"
+// LIBS-430X-POS: "-L{{.*}}/Inputs/basic_msp430_tree/lib/gcc/msp430-elf/8.3.1{{/|\\\\}}"
+// LIBS-430X-POS: "-L{{.*}}/Inputs/basic_msp430_tree{{/|\\\\}}msp430-elf{{/|\\\\}}lib{{/|\\\\}}"
+// LIBS-430X-POS: "-lgcc" "--start-group" "-lmul_none" "-lc" "-lgcc" "-lcrt" "-lnosys" "--end-group"
+// LIBS-430X-POS: "{{.*}}/Inputs/basic_msp430_tree/lib/gcc/msp430-elf/8.3.1{{/|\\\\}}crtend_no_eh.o" "-lgcc"
+// LIBS-430X-NEG-NOT: "{{.*}}/430"
+// LIBS-430X-NEG-NOT: "{{.*}}430/crt{{.*}}"
+// LIBS-430X-NEG-NOT: /exceptions
+
+// RUN: %clang %s -### -no-canonical-prefixes -target msp430 -rtlib=libgcc -mcpu=msp430x -fexceptions \
+// RUN:   --sysroot="%S/Inputs/basic_msp430_tree" > %t 2>&1
+// RUN: FileCheck -check-prefix=LIBS-430X-EXC-POS %s < %t
+// RUN: FileCheck -check-prefix=LIBS-430X-EXC-NEG %s < %t
+// RUN: %clang %s -### -no-canonical-prefixes -target msp430 -rtlib=libgcc -mcpu=msp430xv2 -fexceptions \
+// RUN:   --sysroot="%S/Inputs/basic_msp430_tree" > %t 2>&1
+// RUN: FileCheck -check-prefix=LIBS-430X-EXC-POS %s < %t
+// RUN: FileCheck -check-prefix=LIBS-430X-EXC-NEG %s < %t
+// LIBS-430X-EXC-POS: "{{.*}}/Inputs/basic_msp430_tree/lib/gcc/msp430-elf/8.3.1/../../..{{/|\\\\}}..{{/|\\\\}}bin{{/|\\\\}}msp430-elf-ld"
+// LIBS-430X-EXC-POS: "{{.*}}/Inputs/basic_msp430_tree{{/|\\\\}}msp430-elf{{/|\\\\}}lib/exceptions{{/|\\\\}}crt0.o"
+// LIBS-430X-EXC-POS: "{{.*}}/Inputs/basic_msp430_tree/lib/gcc/msp430-elf/8.3.1/exceptions{{/|\\\\}}crtbegin.o"
+// LIBS-430X-EXC-POS: "-L{{.*}}/Inputs/basic_msp430_tree/lib/gcc/msp430-elf/8.3.1/exceptions"
+// LIBS-430X-EXC-POS: "-L{{.*}}/Inputs/basic_msp430_tree{{/|\\\\}}msp430-elf{{/|\\\\}}lib/exceptions"
+// LIBS-430X-EXC-POS: "-lgcc" "--start-group" "-lmul_none" "-lc" "-lgcc" "-lcrt" "-lnosys" "--end-group"
+// LIBS-430X-EXC-POS: "{{.*}}/Inputs/basic_msp430_tree/lib/gcc/msp430-elf/8.3.1/exceptions{{/|\\\\}}crtend.o" "-lgcc"
+// LIBS-430X-EXC-NEG-NOT: "{{.*}}/430"
+// LIBS-430X-EXC-NEG-NOT: "{{.*}}430/crt{{.*}}"
+
+// Tests for -fstack-protector, -nostdlib, -nostartfiles and -nodefaultlibs.
 // RUN: %clang %s -### -no-canonical-prefixes -target msp430 -rtlib=libgcc \
 // RUN:   -fstack-protector  --sysroot="%S/Inputs/basic_msp430_tree" 2>&1 \
 // RUN:   | FileCheck -check-prefix=LIBS-SSP %s
@@ -266,3 +303,30 @@
 // RUN: %clang %s -### -no-canonical-prefixes -target msp430 -mhwmult=none -mmcu=msp430f4783 --sysroot="" 2>&1 \
 // RUN:   | FileCheck -check-prefix=HWMult-NONE %s
 // HWMult-NONE: "--start-group" "-lmul_none"
+
+// Test for the correct multilib selection when overriding the CPU of an MCU.
+// RUN: %clang %s -### -no-canonical-prefixes -target msp430 -mmcu=msp430f5529 -mcpu=msp430 \
+// RUN:   -rtlib=libgcc --sysroot="%S/Inputs/basic_msp430_tree" > %t 2>&1
+// RUN: FileCheck -check-prefix=LIBS-OVERRIDE-430-POS %s < %t
+// RUN: FileCheck -check-prefix=LIBS-OVERRIDE-430-NEG %s < %t
+// RUN: %clang %s -### -no-canonical-prefixes -target msp430 -mmcu=msp430f5529 -mcpu=msp430 \
+// RUN:    -rtlib=libgcc --gcc-toolchain="%S/Inputs/basic_msp430_tree" --sysroot="" 2>&1 \
+// RUN:   | FileCheck -check-prefix=LIBS-OVERRIDE-430-GCC-TOOLCHAIN %s
+// LIBS-OVERRIDE-430-POS: "{{.*}}/Inputs/basic_msp430_tree/lib/gcc/msp430-elf/8.3.1/../../..{{/|\\\\}}..{{/|\\\\}}bin{{/|\\\\}}msp430-elf-ld"
+// LIBS-OVERRIDE-430-POS: "{{.*}}/Inputs/basic_msp430_tree{{/|\\\\}}msp430-elf{{/|\\\\}}lib/430{{/|\\\\}}crt0.o"
+// LIBS-OVERRIDE-430-POS: "{{.*}}/Inputs/basic_msp430_tree/lib/gcc/msp430-elf/8.3.1/430{{/|\\\\}}crtbegin_no_eh.o"
+// LIBS-OVERRIDE-430-POS: "-L{{.*}}/Inputs/basic_msp430_tree/lib/gcc/msp430-elf/8.3.1/430"
+// LIBS-OVERRIDE-430-POS: "-L{{.*}}/Inputs/basic_msp430_tree{{/|\\\\}}msp430-elf{{/|\\\\}}lib/430"
+// LIBS-OVERRIDE-430-POS: "{{.*}}/Inputs/basic_msp430_tree/lib/gcc/msp430-elf/8.3.1/430{{/|\\\\}}crtend_no_eh.o" "-lgcc"
+// LIBS-OVERRIDE-430-GCC-TOOLCHAIN: "{{.*}}/Inputs/basic_msp430_tree/lib/gcc/msp430-elf/8.3.1/../../..{{/|\\\\}}..{{/|\\\\}}bin{{/|\\\\}}msp430-elf-ld"
+// LIBS-OVERRIDE-430-GCC-TOOLCHAIN: "{{.*}}/Inputs/basic_msp430_tree/lib/gcc/msp430-elf/8.3.1/../../..{{/|\\\\}}..{{/|\\\\}}msp430-elf{{/|\\\\}}lib/430{{/|\\\\}}crt0.o"
+// LIBS-OVERRIDE-430-GCC-TOOLCHAIN: "{{.*}}/Inputs/basic_msp430_tree/lib/gcc/msp430-elf/8.3.1/430{{/|\\\\}}crtbegin_no_eh.o"
+// LIBS-OVERRIDE-430-GCC-TOOLCHAIN: "-L{{.*}}/Inputs/basic_msp430_tree/lib/gcc/msp430-elf/8.3.1/430"
+// LIBS-OVERRIDE-430-GCC-TOOLCHAIN: "-L{{.*}}/Inputs/basic_msp430_tree/lib/gcc/msp430-elf/8.3.1/../../..{{/|\\\\}}..{{/|\\\\}}msp430-elf{{/|\\\\}}lib/430"
+// LIBS-OVERRIDE-430-GCC-TOOLCHAIN: "{{.*}}/Inputs/basic_msp430_tree/lib/gcc/msp430-elf/8.3.1/430{{/|\\\\}}crtend_no_eh.o" "-lgcc"
+// LIBS-OVERRIDE-430-NEG-NOT: crtbegin.o
+// LIBS-OVERRIDE-430-NEG-NOT: -lssp_nonshared
+// LIBS-OVERRIDE-430-NEG-NOT: -lssp
+// LIBS-OVERRIDE-430-NEG-NOT: clang_rt
+// LIBS-OVERRIDE-430-NEG-NOT: crtend.o
+// LIBS-OVERRIDE-430-NEG-NOT: /exceptions

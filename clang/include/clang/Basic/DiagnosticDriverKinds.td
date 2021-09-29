@@ -556,15 +556,18 @@ def err_drv_trivial_auto_var_init_stop_after_invalid_value : Error<
 
 def warn_drv_msp430_hwmult_unsupported : Warning<
   "the given MCU does not support hardware multiply, but '-mhwmult' is set to "
-  "%0">, InGroup<InvalidCommandLineArgument>;
+  "'%0'">, InGroup<InvalidCommandLineArgument>;
 def warn_drv_msp430_hwmult_mismatch : Warning<
-  "the given MCU supports %0 hardware multiply, but '-mhwmult' is set to %1">,
+  "the given MCU supports '%0' hardware multiply, but '-mhwmult' is set to '%1'">,
    InGroup<InvalidCommandLineArgument>;
 def warn_drv_msp430_hwmult_no_device : Warning<
   "no MCU device specified, but '-mhwmult' is set to 'auto', assuming no "
   "hardware multiply; use '-mmcu' to specify an MSP430 device, or '-mhwmult' "
   "to set the hardware multiply type explicitly">,
   InGroup<InvalidCommandLineArgument>;
+def warn_drv_msp430_cpu_mismatch : Warning<
+  "the given MCU supports the '%0' CPU, but '-mcpu' is set to '%1'">,
+   InGroup<InvalidCommandLineArgument>;
 
 def warn_drv_libstdcxx_not_found : Warning<
   "include path for libstdc++ headers not found; pass '-stdlib=libc++' on the "

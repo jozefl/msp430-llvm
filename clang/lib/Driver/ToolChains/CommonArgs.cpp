@@ -17,6 +17,7 @@
 #include "Arch/X86.h"
 #include "HIP.h"
 #include "Hexagon.h"
+#include "MSP430.h"
 #include "clang/Basic/CharInfo.h"
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/ObjCRuntime.h"
@@ -395,6 +396,13 @@ std::string tools::getCPUName(const Driver &D, const ArgList &Args,
     mips::getMipsCPUAndABI(Args, T, CPUName, ABIName);
     return std::string(CPUName);
   }
+
+  case llvm::Triple::msp430:
+    if (const Arg *A = Args.getLastArg(options::OPT_mcpu_EQ))
+      return A->getValue();
+    if (const Arg *A = Args.getLastArg(options::OPT_mmcu_EQ))
+      return msp430::getMSP430CPUFromMCU(A->getValue());
+    return "msp430";
 
   case llvm::Triple::nvptx:
   case llvm::Triple::nvptx64:

@@ -36,7 +36,7 @@ public:
 
 private:
   virtual void anchor();
-  bool ExtendedInsts = false;
+  bool MSP430X = false;
   HWMultEnum HWMultMode = NoHWMult;
   MSP430FrameLowering FrameLowering;
   MSP430InstrInfo InstrInfo;
@@ -59,6 +59,8 @@ public:
   bool hasHWMult16() const { return HWMultMode == HWMult16; }
   bool hasHWMult32() const { return HWMultMode == HWMult32; }
   bool hasHWMultF5() const { return HWMultMode == HWMultF5; }
+
+  bool hasMSP430X() const { return MSP430X; }
 
   const TargetFrameLowering *getFrameLowering() const override {
     return &FrameLowering;

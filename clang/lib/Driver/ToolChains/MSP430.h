@@ -78,6 +78,8 @@ private:
 
 void getMSP430TargetFeatures(const Driver &D, const llvm::opt::ArgList &Args,
                              std::vector<llvm::StringRef> &Features);
+std::string getMSP430CPUFromMCU(StringRef MCU);
+
 } // end namespace msp430
 } // end namespace tools
 } // end namespace driver

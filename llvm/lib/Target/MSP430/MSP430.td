@@ -18,8 +18,8 @@ include "llvm/Target/Target.td"
 // Subtarget Features. 
 //===----------------------------------------------------------------------===//
 def FeatureX
- : SubtargetFeature<"ext", "ExtendedInsts", "true",
-                    "Enable MSP430-X extensions">;
+ : SubtargetFeature<"msp430x", "MSP430X", "true",
+                    "Enable MSP430X extensions">;
 
 def FeatureHWMult16
  : SubtargetFeature<"hwmult16", "HWMultMode", "HWMult16",
@@ -42,6 +42,7 @@ class Proc<string Name, list<SubtargetFeature> Features>
 def : Proc<"generic",         []>;
 def : Proc<"msp430",          []>;
 def : Proc<"msp430x",         [FeatureX]>;
+def : Proc<"msp430xv2",       [FeatureX]>;
 
 //===----------------------------------------------------------------------===//
 // Register File Description

@@ -1564,21 +1564,33 @@ static bool findMSP430Multilibs(const Driver &D,
                                 StringRef Path, const ArgList &Args,
                                 DetectedMultilibs &Result) {
   FilterNonExistent NonExistent(Path, "/crtbegin.o", D.getVFS());
-  Multilib WithoutExceptions = makeMultilib("/430").flag("-exceptions");
-  Multilib WithExceptions = makeMultilib("/430/exceptions").flag("+exceptions");
+  Multilib WithoutExceptions =
+      makeMultilib("/430").flag("-exceptions").flag("-msp430x");
+  Multilib WithExceptions =
+      makeMultilib("/430/exceptions").flag("+exceptions").flag("-msp430x");
+  Multilib WithoutExceptions430x =
+      makeMultilib("").flag("-exceptions").flag("+msp430x");
+  Multilib WithExceptions430x =
+      makeMultilib("/exceptions").flag("+exceptions").flag("+msp430x");
 
-  // FIXME: when clang starts to support msp430x ISA additional logic
-  // to select between multilib must be implemented
+  // FIXME: When LLVM starts to support the msp430x large memory model (20-bit
+  // pointers) additional logic to select between multilibs must be implemented.
   // Multilib MSP430xMultilib = makeMultilib("/large");
 
   Result.Multilibs.push_back(WithoutExceptions);
   Result.Multilibs.push_back(WithExceptions);
+  Result.Multilibs.push_back(WithoutExceptions430x);
+  Result.Multilibs.push_back(WithExceptions430x);
   Result.Multilibs.FilterOut(NonExistent);
 
   Multilib::flags_list Flags;
   addMultilibFlag(Args.hasFlag(options::OPT_fexceptions,
                                options::OPT_fno_exceptions, false),
                   "exceptions", Flags);
+
+  std::string CPUName = tools::getCPUName(D, Args, TargetTriple);
+  bool msp430x = (CPUName == "msp430x" || CPUName == "msp430xv2");
+  addMultilibFlag(msp430x, "msp430x", Flags);
   if (Result.Multilibs.select(Flags, Result.SelectedMultilib))
     return true;
 
